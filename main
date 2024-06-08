@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Lottery {
+    address public owner;
+    uint256 public ticketPrice;
+    uint256 public roundDuration;
+    uint256 public lastRoundEndTime;
+    uint256 public totalTokens;
+    uint256 public totalTicketsSold;
+    address[] public participants;
+    
+    event TicketPurchased(address indexed participant, uint256 ticketCount);
+    event WinnerSelected(address indexed winner, uint256 prizeAmount);
+    
+    mapping(address => uint256) public tokenBalances;
+    
+    constructor(uint256 _ticketPrice, uint256 _roundDuration) {
+        owner = msg.sender;
+        ticketPrice = _ticketPrice;
+        roundDuration = _roundDuration;
+        lastRoundEndTime = block.timestamp;
+    }
+    
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner can perform this action");
+        _;
+    }
+    
+    function buyTickets(uint256 _ticketCount) external {
+        require(tokenBalances[msg.sender] >= ticketPrice * _ticketCount, "Insufficient balance");
+        
+        // Deduct tokens from participant's balance
+        tokenBalances[msg.sender] -= ticketPrice * _ticketCount;
+        
+        // Update total tokens and total tickets sold
+        totalTokens += ticketPrice * _ticketCount;
+        totalTicketsSold += _ticketCount;
+        
+        // Add participant to the pool
+        for (uint256 i = 0; i < _ticketCount; i++) {
+            participants.push(msg.sender);
+        }
+        
+        emit TicketPurchased(msg.sender, _ticketCount);
+    }
+    
+    function selectWinner() external onlyOwner {
+        require(block.timestamp >= lastRoundEndTime + roundDuration, "Round duration not elapsed yet");
+        require(totalTicketsSold > 0, "No tickets sold in this round");
+        
+        // Select winner randomly
+        uint256 winnerIndex = random() % participants.length;
+        address winner = participants[winnerIndex];
+        
+        // Calculate prize amount (90% of totalTokens)
+        uint256 prizeAmount = (totalTokens * 90) / 100;
+        
+        // Transfer prize amount to winner
+        tokenBalances[winner] += prizeAmount;
+        
+        // Reset round variables
+        delete participants;
+        totalTokens = 0;
+        totalTicketsSold = 0;
+        lastRoundEndTime = block.timestamp;
+        
+        emit WinnerSelected(winner, prizeAmount);
+    }
+    
+    // Generate pseudo-random number
+    function random() private view returns (uint256) {
+        return uint256(keccak256(abi.encodePacked(block.difficulty, block.timestamp, participants.length)));
+    }
+}
